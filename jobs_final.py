@@ -1,3 +1,5 @@
+#updated
+%%writefile jobs_final.py
 import base64
 import os
 import streamlit as st
@@ -16,9 +18,7 @@ import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
-# ------------------------------
-# Basic config / logging
-# ------------------------------
+
 logging.basicConfig(level=logging.ERROR)
 warnings.filterwarnings('ignore')
 
@@ -28,18 +28,14 @@ st.set_page_config(
     initial_sidebar_state='auto'
 )
 
-# ------------------------------
-# Background image setup
-# ------------------------------
+
 def set_background_image(image_path: str):
     if not Path(image_path).exists():
         st.warning(f"Background image not found: {image_path}")
         return
-
     with open(image_path, "rb") as f:
         encoded = f.read()
     b64 = base64.b64encode(encoded).decode()
-
     st.markdown(f"""
     <style>
     .stApp {{
@@ -56,9 +52,9 @@ def set_background_image(image_path: str):
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0);  /* ← Adjust this value */
+        background-color: rgba(0, 0, 0, 0);
         z-index: -1;
-}}
+    }}
     .app-backdrop {{
         background: rgba(255,255,255,0.85);
         padding: 12px;
@@ -69,19 +65,19 @@ def set_background_image(image_path: str):
     </style>
     """, unsafe_allow_html=True)
 
-# Helpers: load artifacts & preprocessing
 try:
     cache_resource = st.cache_resource
 except Exception:
     cache_resource = st.cache(allow_output_mutation=True)
 
 @cache_resource
-def load_artifacts():
+def load_artifacts(model_name='LSTM.keras'):
     with open('tokenizer.pkl', 'rb') as f:
         tokenizer = pickle.load(f)
     with open('label_encoder.pkl', 'rb') as f:
         label_encoder = pickle.load(f)
-    model = load_model('LSTM.keras', compile=False)
+    model_path = os.path.join('models', model_name)
+    model = load_model(model_path, compile=False)
     optimizer = Nadam(learning_rate=1e-3)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
     return tokenizer, label_encoder, model
@@ -118,15 +114,19 @@ def main():
     st.write('Paste a job description and the model will predict the most likely job title / category.')
     st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.spinner('Loading model and artifacts...'):
+    # Sidebar: model selector
+    st.sidebar.header('Options & Info')
+    model_choices = sorted([f for f in os.listdir('models') if f.endswith('.keras')])
+    selected_model = st.sidebar.selectbox('Choose model', model_choices)
+
+    with st.spinner(f'Loading model: {selected_model}'):
         try:
-            tokenizer, label_encoder, model = load_artifacts()
+            tokenizer, label_encoder, model = load_artifacts(selected_model)
         except Exception:
-            st.error("Failed loading artifacts. Ensure tokenizer.pkl, label_encoder.pkl, and LSTM.keras exist.")
+            st.error(f"Failed loading model: {selected_model}")
             return
 
-    st.sidebar.header('Options & Info')
-    st.sidebar.write(f'Model: LSTM.keras')
+    st.sidebar.write(f'Model: {selected_model}')
     st.sidebar.write(f'Classes: {len(label_encoder.classes_)}')
     top_k = st.sidebar.slider('Show top K predictions', min_value=1, max_value=10, value=3)
 
@@ -219,3 +219,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
