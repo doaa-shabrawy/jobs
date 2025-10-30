@@ -1,15 +1,22 @@
+# Core ML libraries
 tensorflow==2.18.0
 keras==3.8.0
 numpy==1.25.2
 pandas==2.2.2
+
+# Streamlit and visualization
+streamlit==1.38.0
+rich<14,>=10.14.0
 plotly==5.18.0
-streamlit==1.38.0  # newer version that supports rich 14.x
-wordcloud==1.9.4
 matplotlib==3.9.0
-rich==14.2.0
+wordcloud==1.9.4
+
+# Markdown support (for Streamlit)
 markdown-it-py==4.0.0
 mdurl==0.1.2
 pygments==2.19.2
+
+
 
 
 
