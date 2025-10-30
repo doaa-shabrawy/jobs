@@ -1,9 +1,9 @@
-import base64
 import os
 import streamlit as st
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.optimizers import Nadam
 import pickle
@@ -14,8 +14,7 @@ import warnings
 import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import tensorflow as tf
-from tensorflow.keras import models
+import requests
 
 logging.basicConfig(level=logging.ERROR)
 warnings.filterwarnings('ignore')
@@ -26,9 +25,9 @@ st.set_page_config(
     initial_sidebar_state='auto'
 )
 
+# ------------------------- Background -------------------------
 def set_background_image(image_path: str):
     if not Path(image_path).exists():
-        st.warning(f"Background image not found: {image_path}")
         return
     with open(image_path, "rb") as f:
         encoded = f.read()
@@ -62,35 +61,58 @@ def set_background_image(image_path: str):
     </style>
     """, unsafe_allow_html=True)
 
+# ------------------------- Cache -------------------------
 try:
     cache_resource = st.cache_resource
 except Exception:
     cache_resource = st.cache(allow_output_mutation=True)
 
+# ------------------------- GitHub Downloader -------------------------
 @cache_resource
-def load_artifacts(model_name='LSTM.keras'):
-    with open('tokenizer.pkl', 'rb') as f:
+def download_file_if_missing(file_name, github_username, repo_name, folder='models'):
+    os.makedirs(folder, exist_ok=True)
+    file_path = os.path.join(folder, file_name)
+    if not os.path.exists(file_path):
+        url = f'https://raw.githubusercontent.com/{github_username}/{repo_name}/main/{folder}/{file_name}'
+        r = requests.get(url)
+        if r.status_code == 200:
+            with open(file_path, 'wb') as f:
+                f.write(r.content)
+        else:
+            st.error(f"Failed to download {file_name} from GitHub. Status code: {r.status_code}")
+            return None
+    return file_path
+
+# ------------------------- Load Artifacts -------------------------
+@cache_resource
+def load_artifacts(model_name):
+    github_username = '<your-username>'
+    repo_name = 'job'
+
+    # Ensure tokenizer and label_encoder exist
+    tokenizer_path = download_file_if_missing('tokenizer.pkl', github_username, repo_name, folder='.')
+    label_encoder_path = download_file_if_missing('label_encoder.pkl', github_username, repo_name, folder='.')
+    if not tokenizer_path or not label_encoder_path:
+        return None, None, None
+
+    with open(tokenizer_path, 'rb') as f:
         tokenizer = pickle.load(f)
-    with open('label_encoder.pkl', 'rb') as f:
+    with open(label_encoder_path, 'rb') as f:
         label_encoder = pickle.load(f)
 
-    model_path = os.path.join('models', model_name)
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found at {model_path}")
+    # Download model if missing
+    model_path = download_file_if_missing(model_name, github_username, repo_name, folder='models')
+    if not model_path:
+        return None, None, None
 
-    try:
-        model = models.load_model(model_path, compile=False)
-    except Exception:
-        # Fallback for legacy models
-        model = tf.keras.models.load_model(model_path, compile=False)
-
+    model = load_model(model_path, compile=False)
     optimizer = Nadam(learning_rate=1e-3)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
     return tokenizer, label_encoder, model
 
+# ------------------------- Text Processing -------------------------
 def clean_text(text):
-    if not isinstance(text, str):
-        return ''
+    if not isinstance(text, str): return ''
     text = text.lower()
     text = re.sub(r'job description[a-z]*', '', text)
     text = re.sub(r'[^a-zA-Z\s]', ' ', text)
@@ -113,31 +135,28 @@ def create_wordcloud(text):
     ax.axis('off')
     return fig
 
+# ------------------------- Main App -------------------------
 def main():
     set_background_image("pexels-ruslan-burlaka-40570-140945.jpg")
-
     st.markdown('<div class="app-backdrop">', unsafe_allow_html=True)
     st.title('Job Title Prediction from Description')
-    st.write('Paste a job description and the model will predict the most likely job title / category.')
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.sidebar.header('Options & Info')
-    model_choices = sorted([f for f in os.listdir('models') if f.endswith('.keras')])
-    selected_model = st.sidebar.selectbox('Choose model', model_choices)
+
+    # List all .keras models from the local folder
+    local_models = ['RNN.keras', 'LSTM.keras', 'GRU.keras', 'Embed_Bi_LSTM.keras']
+    selected_model = st.sidebar.selectbox('Choose model', local_models)
 
     with st.spinner(f'Loading model: {selected_model}'):
-        try:
-            tokenizer, label_encoder, model = load_artifacts(selected_model)
-        except Exception as e:
-            st.error(f"Failed loading model: {selected_model}\n\n{str(e)}")
+        tokenizer, label_encoder, model = load_artifacts(selected_model)
+        if model is None:
             return
 
     st.sidebar.write(f'Model: {selected_model}')
     st.sidebar.write(f'Classes: {len(label_encoder.classes_)}')
-    top_k = st.sidebar.slider('Show top K predictions', min_value=1, max_value=10, value=3)
+    top_k = st.sidebar.slider('Show top K predictions', 1, 10, 3)
 
-    st.sidebar.markdown('---')
-    st.sidebar.markdown('Examples:')
     example = st.sidebar.selectbox('Pick a sample description', [
         '',
         'We are looking for a software engineer with experience in Python, TensorFlow, and REST APIs.',
@@ -145,82 +164,33 @@ def main():
         'Experienced data scientist required: SQL, Python, machine learning models, production deployment.',
         'Administrative assistant needed for scheduling, record keeping, and customer support.'
     ])
-
-    st.markdown('<div class="app-backdrop" style="margin-top:15px;">', unsafe_allow_html=True)
     description = st.text_area('Paste your job description here:', value=example, height=220)
-
-    col_left, col_right = st.columns([3, 1])
-    with col_right:
-        if st.button('Clear'):
-            description = ''
 
     if st.button('Predict Job Title'):
         if not description or len(description.strip()) < 10:
             st.warning('Please paste a longer job description (at least ~10 characters).')
         else:
             cleaned = clean_text(description)
-            labels, scores = predict_top_k(model, tokenizer, label_encoder, cleaned, max_len=200, k=top_k)
+            labels, scores = predict_top_k(model, tokenizer, label_encoder, cleaned, k=top_k)
 
-            res_col_left, res_col_right = st.columns(2)
-            with res_col_left:
-                st.markdown('<div class="prediction-box">', unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
                 if labels:
                     st.success(f'Primary prediction: {labels[0]} — {scores[0]*100:.2f}% confidence')
-                else:
-                    st.error("No prediction returned.")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-                st.subheader('Top predictions')
-                results = pd.DataFrame({
+                results_df = pd.DataFrame({
                     'Job Category': labels,
                     'Confidence': [f'{s*100:.2f}%' for s in scores]
                 })
-                st.table(results)
+                st.table(results_df)
 
-            with res_col_right:
-                st.subheader('Confidence Distribution')
+            with col2:
                 if labels and scores:
-                    fig = px.pie(
-                        values=[s * 100 for s in scores],
-                        names=labels,
-                        title='Prediction Confidence Distribution',
-                        hole=0.4
-                    )
+                    fig = px.pie(values=[s*100 for s in scores], names=labels, title='Prediction Confidence Distribution', hole=0.4)
                     st.plotly_chart(fig, use_container_width=True)
 
             st.subheader('Key Terms Visualization')
             wc_fig = create_wordcloud(cleaned)
-            if wc_fig:
-                st.pyplot(wc_fig)
-
-            with st.expander("View Processed Text"):
-                st.subheader('Description (cleaned)')
-                st.write(cleaned)
-                st.subheader('Original description')
-                st.write(description)
-
-            results_df = pd.DataFrame({
-                'label': labels,
-                'confidence': [float(s) for s in scores],
-                'confidence_pct': [f'{s*100:.2f}%' for s in scores]
-            })
-            csv_buf = BytesIO()
-            results_df.to_csv(csv_buf, index=False)
-            csv_buf.seek(0)
-            st.download_button(
-                label='Download Results (CSV)',
-                data=csv_buf,
-                file_name='job_predictions.csv',
-                mime='text/csv'
-            )
-
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('---')
-    st.markdown(
-        '<div class="small">Note: Predictions are based on a trained model and may not be perfect. '
-        'Consider this as an assistive suggestion.</div>',
-        unsafe_allow_html=True
-    )
+            st.pyplot(wc_fig)
 
 if __name__ == '__main__':
     main()
