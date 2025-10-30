@@ -1,5 +1,4 @@
 #updated
-%%writefile jobs_final.py
 import base64
 import os
 import streamlit as st
@@ -219,4 +218,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
