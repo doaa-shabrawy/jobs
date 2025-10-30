@@ -5,6 +5,10 @@ plotly==5.18.0
 streamlit==1.25.0
 tensorflow-cpu==2.13.0
 wordcloud==1.9.2
+scikit-learn==1.2.2
+seaborn==0.12.2
+
+
 
 
 
