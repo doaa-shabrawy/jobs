@@ -15,6 +15,7 @@ import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import requests
+import base64
 
 logging.basicConfig(level=logging.ERROR)
 warnings.filterwarnings('ignore')
@@ -194,3 +195,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
