@@ -1,13 +1,12 @@
 tensorflow==2.18.0
 keras==3.8.0
-numpy==1.25.2
+numpy==1.26.1       # must satisfy TF 2.18
 pandas==2.2.2
 plotly==5.18.0
 streamlit==1.38.0
 wordcloud==1.9.4
 matplotlib==3.9.0
-rich==13.3.5
-
+rich==13.3.5        # compatible with Streamlit
 
 
 
