@@ -30,10 +30,13 @@ def set_background_image(image_path):
 
 # ------------------------- Load Artifacts -------------------------
 def load_artifacts(selected_model):
-    """Load tokenizer, label encoder, and Keras .h5 model"""
-    tokenizer_path = f"models/{selected_model}_tokenizer.pkl"
-    label_encoder_path = f"models/{selected_model}_label_encoder.pkl"
-    model_path = f"models/{selected_model}.h5"  # using .h5 now
+    """
+    Load tokenizer, label encoder, and Keras .h5 model
+    Now models are in repo root, not in a folder
+    """
+    tokenizer_path = f"{selected_model}_tokenizer.pkl"
+    label_encoder_path = f"{selected_model}_label_encoder.pkl"
+    model_path = f"{selected_model}.h5"  # directly in root
 
     if not os.path.exists(model_path):
         st.error(f"Model file not found: {model_path}")
@@ -61,7 +64,7 @@ def main():
     st.title("Job Title Prediction from Description")
 
     # Sidebar for model selection
-    local_models = ["RNN", "LSTM", "GRU", "Embed_Bi_LSTM"]
+    local_models = ["RNN", "LSTM", "GRU", "Embed_Bi_LSTM", "Bidirectional_LSTM"]
     selected_model = st.sidebar.selectbox("Choose model", local_models)
 
     # Load selected model and artifacts
