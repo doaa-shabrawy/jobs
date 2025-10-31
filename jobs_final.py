@@ -25,6 +25,7 @@ st.set_page_config(
     initial_sidebar_state='auto'
 )
 
+# ------------------------- Background Image -------------------------
 def set_background_image(image_path: str):
     if not Path(image_path).exists():
         st.warning(f"Background image not found: {image_path}")
@@ -61,36 +62,41 @@ def set_background_image(image_path: str):
     </style>
     """, unsafe_allow_html=True)
 
+# ------------------------- Cache decorator -------------------------
 try:
     cache_resource = st.cache_resource
 except Exception:
     cache_resource = st.cache(allow_output_mutation=True)
 
+# ------------------------- Load Artifacts -------------------------
 @cache_resource
-def load_artifacts(model_name='LSTM.keras'):
-    # Load tokenizer & label encoder
-    with open('tokenizer.pkl', 'rb') as f:
+def load_artifacts(model_name='RNN.h5'):
+    """Load tokenizer, label encoder, and Keras model from root directory."""
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # Tokenizer and label encoder paths
+    tokenizer_path = os.path.join(BASE_DIR, "tokenizer.pkl")
+    label_encoder_path = os.path.join(BASE_DIR, "label_encoder.pkl")
+
+    # Model path (root)
+    model_path = os.path.join(BASE_DIR, model_name)
+
+    # Load tokenizer
+    with open(tokenizer_path, 'rb') as f:
         tokenizer = pickle.load(f)
-    with open('label_encoder.pkl', 'rb') as f:
+
+    # Load label encoder
+    with open(label_encoder_path, 'rb') as f:
         label_encoder = pickle.load(f)
-
-    # Ensure model file exists
-    if not model_name.endswith(('.keras', '.h5')):
-        if os.path.exists(os.path.join('models', model_name + '.keras')):
-            model_name += '.keras'
-        elif os.path.exists(os.path.join('models', model_name + '.h5')):
-            model_name += '.h5'
-
-    model_path = os.path.join('models', model_name)
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}")
 
     # Load Keras model
     model = load_model(model_path, compile=False)
     optimizer = Nadam(learning_rate=1e-3)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
     return tokenizer, label_encoder, model
 
+# ------------------------- Text cleaning -------------------------
 def clean_text(text):
     if not isinstance(text, str): return ''
     text = text.lower()
@@ -99,10 +105,9 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def predict_top_k(model, tokenizer, label_encoder, text, max_len=None, k=3):
+# ------------------------- Predict top K -------------------------
+def predict_top_k(model, tokenizer, label_encoder, text, max_len=200, k=3):
     seq = tokenizer.texts_to_sequences([text])
-    if max_len is None:
-        max_len = model.input_shape[1]
     padded = pad_sequences(seq, maxlen=max_len, padding='post', truncating='post')
     probs = model.predict(padded, verbose=0)[0]
     top_idx = probs.argsort()[::-1][:k]
@@ -110,6 +115,7 @@ def predict_top_k(model, tokenizer, label_encoder, text, max_len=None, k=3):
     scores = probs[top_idx]
     return list(labels), list(scores)
 
+# ------------------------- WordCloud -------------------------
 def create_wordcloud(text):
     wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -117,6 +123,7 @@ def create_wordcloud(text):
     ax.axis('off')
     return fig
 
+# ------------------------- Main App -------------------------
 def main():
     set_background_image("pexels-ruslan-burlaka-40570-140945.jpg")
 
@@ -125,8 +132,12 @@ def main():
     st.write('Paste a job description and the model will predict the most likely job title / category.')
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Sidebar: model selector
     st.sidebar.header('Options & Info')
-    model_choices = sorted([f for f in os.listdir('models') if f.endswith(('.keras','.h5'))])
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    model_choices = sorted([f for f in os.listdir(BASE_DIR) if f in [
+        "RNN.h5", "Bidirectional_LSTM.h5", "Embed_Bi_LSTM.h5", "LSTM.h5", "GRU.h5"
+    ]])
     selected_model = st.sidebar.selectbox('Choose model', model_choices)
 
     with st.spinner(f'Loading model: {selected_model}'):
@@ -163,7 +174,7 @@ def main():
             st.warning('Please paste a longer job description (at least ~10 characters).')
         else:
             cleaned = clean_text(description)
-            labels, scores = predict_top_k(model, tokenizer, label_encoder, cleaned, max_len=None, k=top_k)
+            labels, scores = predict_top_k(model, tokenizer, label_encoder, cleaned, max_len=200, k=top_k)
 
             res_col_left, res_col_right = st.columns(2)
             with res_col_left:
@@ -219,7 +230,6 @@ def main():
             )
 
     st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown('---')
     st.markdown(
         '<div class="small">Note: Predictions are based on a trained model and may not be perfect. '
