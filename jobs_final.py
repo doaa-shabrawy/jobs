@@ -6,9 +6,11 @@ import base64
 import os
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 # ------------------------- Background Image -------------------------
 def set_background_image(image_path):
+    """Set a background image for the Streamlit app."""
     if not os.path.exists(image_path):
         st.warning(f"Background image not found: {image_path}")
         return
@@ -30,17 +32,26 @@ def set_background_image(image_path):
 
 # ------------------------- Load Artifacts -------------------------
 def load_artifacts(selected_model):
-    """
-    Load tokenizer, label encoder, and Keras .h5 model
-    Now models are in repo root, not in a folder
-    """
-    tokenizer_path = f"{selected_model}_tokenizer.pkl"
-    label_encoder_path = f"{selected_model}_label_encoder.pkl"
-    model_path = f"{selected_model}.h5"  # directly in root
+    """Load tokenizer, label encoder, and Keras model from repo root."""
+    # Use script directory to ensure correct paths
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    if not os.path.exists(model_path):
-        st.error(f"Model file not found: {model_path}")
-        return None, None, None
+    tokenizer_path = os.path.join(BASE_DIR, f"{selected_model}_tokenizer.pkl")
+    label_encoder_path = os.path.join(BASE_DIR, f"{selected_model}_label_encoder.pkl")
+    model_path = os.path.join(BASE_DIR, f"{selected_model}.h5")
+
+    # Debug: show what files we are trying to load
+    st.write("Trying to load files:")
+    st.write("Model:", model_path)
+    st.write("Tokenizer:", tokenizer_path)
+    st.write("Label Encoder:", label_encoder_path)
+    st.write("Files in directory:", os.listdir(BASE_DIR))
+
+    # Check if files exist
+    for path in [tokenizer_path, label_encoder_path, model_path]:
+        if not os.path.exists(path):
+            st.error(f"File not found: {path}")
+            return None, None, None
 
     # Load tokenizer
     with open(tokenizer_path, "rb") as f:
@@ -59,15 +70,18 @@ def load_artifacts(selected_model):
 
 # ------------------------- Main App -------------------------
 def main():
+    # Background
     set_background_image("pexels-ruslan-burlaka-40570-140945.jpg")
 
     st.title("Job Title Prediction from Description")
 
-    # Sidebar for model selection
-    local_models = ["RNN", "LSTM", "GRU", "Embed_Bi_LSTM", "Bidirectional_LSTM"]
+    # Sidebar: automatically detect models in repo root
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    all_files = os.listdir(BASE_DIR)
+    local_models = sorted([f.split(".h5")[0] for f in all_files if f.endswith(".h5")])
     selected_model = st.sidebar.selectbox("Choose model", local_models)
 
-    # Load selected model and artifacts
+    # Load selected model
     with st.spinner(f"Loading model: {selected_model}..."):
         tokenizer, label_encoder, model = load_artifacts(selected_model)
         if model is None:
@@ -80,19 +94,17 @@ def main():
         if not input_text:
             st.warning("Please enter a job description first.")
         else:
-            # Tokenize input
+            # Tokenize and pad
             seq = tokenizer.texts_to_sequences([input_text])
             max_len = model.input_shape[1]
-            from tensorflow.keras.preprocessing.sequence import pad_sequences
             seq_padded = pad_sequences(seq, maxlen=max_len, padding='post', truncating='post')
 
             # Predict
             pred = model.predict(seq_padded)
             pred_label = label_encoder.inverse_transform([pred.argmax()])[0]
-
             st.success(f"Predicted Job Title: **{pred_label}**")
 
-    # Optional: WordCloud example
+    # Optional WordCloud
     if st.checkbox("Show WordCloud Example"):
         wc_fig, ax = plt.subplots()
         wc = WordCloud(width=800, height=400).generate(input_text if input_text else "Job")
