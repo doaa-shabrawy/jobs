@@ -33,11 +33,11 @@ def set_background_image(image_path):
 # ------------------------- Load Artifacts -------------------------
 def load_artifacts(selected_model):
     """Load tokenizer, label encoder, and Keras model from repo root."""
-    # Use script directory to ensure correct paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    tokenizer_path = os.path.join(BASE_DIR, f"{selected_model}_tokenizer.pkl")
-    label_encoder_path = os.path.join(BASE_DIR, f"{selected_model}_label_encoder.pkl")
+    # Use the single tokenizer and label encoder for all models
+    tokenizer_path = os.path.join(BASE_DIR, "tokenizer.pkl")
+    label_encoder_path = os.path.join(BASE_DIR, "label_encoder.pkl")
     model_path = os.path.join(BASE_DIR, f"{selected_model}.h5")
 
     # Debug: show what files we are trying to load
@@ -75,7 +75,7 @@ def main():
 
     st.title("Job Title Prediction from Description")
 
-    # Sidebar: automatically detect models in repo root
+    # Sidebar: automatically detect available models in repo root
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     all_files = os.listdir(BASE_DIR)
     local_models = sorted([f.split(".h5")[0] for f in all_files if f.endswith(".h5")])
